@@ -22,7 +22,7 @@
 //sql
 #include <cppconn/connection.h>
 
-void lda(const std::string& path, std::ofstream& out);
+void lda(const std::string& path, std::ofstream& out,boost::shared_ptr<sql::Connection> con);
 
 class IFrontEnd
 {

@@ -25,6 +25,7 @@
 #include <boost/lexical_cast.hpp>
 #include <boost/filesystem.hpp>
 
+
 namespace ublas = boost::numeric::ublas;
 using namespace std;
 using namespace boost;
@@ -96,18 +97,15 @@ std::vector<std::string> FrontEnd::matchAd(const std::string& query,
   scoped_ptr<sql::ResultSet> rs;	
 	
   try {
-    pstmt.reset(con->prepareStatement("SELECT 1_Query, 2_Query, 3_Query, 4_Query, 5_Query " 
-				      "FROM QueryRewrites WHERE Query LIKE ?"));
+    pstmt.reset(con->prepareStatement("SELECT Therm2 " 
+				      "FROM Simularity WHERE Therm1 LIKE ?"));
     pstmt->setString(1, query);
     rs.reset(pstmt->executeQuery());
 
-    if(rs->next()){
-      for(unsigned int i=1;i<6;i++){
-	string rewrite=rs->getString(i);
-	
-	if(!rewrite.empty())
-	  rewrites.push_back(rewrite);
-      }
+    while(rs->next()){
+	string rewrite=rs->getString(1);
+        rewrites.push_back(rewrite);
+	if(rewrites.size()>5) break;
     }
   } catch(sql::SQLException &e) {
     cout << "in BackEnd::matchAdRewrites: " << e.getErrorCode() << endl;
@@ -148,6 +146,10 @@ ublas::vector<int> FrontEnd::getVec(int i, int size){
 struct pairCompareOperator {
   bool operator() (pair<string,double> i,pair<string,double> j) { return(i.second>j.second); }
 } pairCompare;
+
+struct pairCompareOperator1 {
+  bool operator() (pair<int,double> i,pair<int,double> j) { return(i.second>j.second); }
+} pairCompare1;
 
 
 bool FrontEnd::analyzeClickGraph(const std::string& file) { 
@@ -410,6 +412,10 @@ public:
   std::string operator()(std::string& x) {
     std::string ret = "";
     int i = ctr->count(x);
+    if(i==0){ 
+      count++;
+      return ret; 
+    }
     ret.append(boost::lexical_cast<std::string>(count));
     ret.append(":");
     ret.append(boost::lexical_cast<std::string>(i));
@@ -422,7 +428,25 @@ private:
   int count;
 };
 
-void lda(const std::string& path, std::ofstream& out) {
+bool tablesExist(boost::shared_ptr<sql::Connection> con) {
+  try{
+    scoped_ptr<sql::PreparedStatement> pstmt;
+    scoped_ptr<sql::ResultSet> rs;
+
+    pstmt.reset(con->prepareStatement("SELECT table_name "
+				      "FROM information_schema.tables "
+				      "WHERE table_schema = 'AdWorks' "
+				      "AND table_name = 'Simularity';"));
+    //you won't see it
+    rs.reset(pstmt->executeQuery());
+    return rs->next();
+  } catch (sql::SQLException &e) {
+    cout<<"in BackEnd::tablesExist: " <<e.getErrorCode()<<endl;
+    throw e;
+  }
+} 
+
+void lda(const std::string& path, std::ofstream& out, boost::shared_ptr<sql::Connection> con) {
   namespace fs = boost::filesystem;
   typedef std::vector<std::string> StrVec;
   typedef std::multiset<std::string> CountSet;
@@ -434,6 +458,22 @@ void lda(const std::string& path, std::ofstream& out) {
   boost::char_separator<char> sep("  \".;:-()!?,\t\n–");
   StrVec global_strings;
   fs::path p(path);
+
+  // collect the full dictionary
+  StrVec dict;
+  for(fs::directory_iterator it(p); it != fs::directory_iterator(); ++it) { 
+    std::ifstream i(it->path().native().c_str());
+    std::istreambuf_iterator<char> file_iter(i);
+    std::istreambuf_iterator<char> eof;
+    std::ostream_iterator<string> out_stream(out);
+    Tokenizer tok(file_iter, eof, sep);
+    // we want all unique words with their count appended to the string
+    // read all words, sort them
+    std::copy(tok.begin(), tok.end(), std::back_inserter(dict));
+  }
+  std::sort(dict.begin(), dict.end());
+  dict.erase(std::unique(dict.begin(), dict.end()), dict.end());
+  cout << dict.size() << endl;
 
   for(fs::directory_iterator it(p); it != fs::directory_iterator(); ++it) { 
     std::ifstream i(it->path().native().c_str());
@@ -449,11 +489,89 @@ void lda(const std::string& path, std::ofstream& out) {
 
     CountSet counting_set(vec.begin(), vec.end());
     vec.erase(std::unique(vec.begin(), vec.end()), vec.end());
-    
+
+    out << vec.size() << " ";
+
     //decorate each with a count
-    std::transform(vec.begin(), vec.end(), out_stream,
+    std::transform(dict.begin(), dict.end(), out_stream,
                    ToCount(&counting_set));
     out << "\n";
+  }
+
+  //std::system("lda est 0.025 40 settings.txt tmpfile-lda.txt random foo/");
+  
+  typedef tokenizer< boost::char_separator<char> > Tokenizer1;
+  boost::char_separator<char> sep1(" ");
+	
+  ifstream in("foo/final.beta");
+  if (!in.is_open()) throw;
+  string line;	
+  std::vector<std::pair<int,double> > clusterValues;
+  int clusterNum=0;
+  
+
+  boost::scoped_ptr<sql::PreparedStatement> pstmt;
+  if(tablesExist(con)) {
+    //drop all
+    try {
+      pstmt.reset(con->prepareStatement("DROP TABLE Simularity"));
+      pstmt->executeUpdate();
+    } catch(sql::SQLException &e) {
+      cout<<"in FrontEnd::initDatabase whiledropping: " <<e.getErrorCode()<<endl;
+      throw e;
+    } 
+  }
+  //create all
+  try {
+    pstmt.reset(con->prepareStatement("CREATE TABLE Simularity(Therm1 VARCHAR(60), Therm2 VARCHAR(60), PRIMARY KEY (Therm1, Therm2))"));
+    pstmt->executeUpdate();
+  } catch(sql::SQLException &e) {
+    cout<<"in FrontEnd::initDatabase while creating: " << e.getErrorCode() << endl;
+    throw e;
+  } 
+  
+  while (getline(in,line)){	
+    std::vector<std::pair<int,double> > clusterValues;
+    Tokenizer1 tok(line,sep1);
+    Tokenizer1::iterator tok_iter;
+    std::vector<double>::iterator it;
+    int count=0;
+    for(tok_iter=tok.begin();tok_iter!=tok.end();++tok_iter){
+       clusterValues.push_back(std::pair<int,double>(count,lexical_cast<double>(*tok_iter)));
+       count++;
+    }
+    std::sort(clusterValues.begin(),clusterValues.end(),pairCompare1);
+    std::vector<std::pair<int,double> >::iterator clusterIter=clusterValues.begin();
+    
+    cout << "Cluster " << clusterNum << ":" << endl;
+    ++clusterNum;
+    std::vector<std::string> simularStrs;
+    for(int i=0;i<10;++i){
+       cout<<(*clusterIter).second<<"\t"<<dict[(*clusterIter).first]<<endl;
+       simularStrs.push_back(dict[(*clusterIter).first]);
+       ++clusterIter;
+    }
+    for(int i=0;i<9;i++)
+       for(int j=i+1;j<10;j++){
+          try{
+             pstmt.reset(con->prepareStatement("INSERT INTO Simularity(Therm1, Therm2) VALUES (?,?)"));
+             pstmt->setString(1, simularStrs[i]);
+	     pstmt->setString(2, simularStrs[j]);
+             pstmt->executeUpdate();
+          }catch(sql::SQLException &e) {
+         }
+       }
+     for(int i=0;i<9;i++)
+       for(int j=i+1;j<10;j++){
+          try{
+             pstmt.reset(con->prepareStatement("INSERT INTO Simularity(Therm1, Therm2) VALUES (?,?)"));
+             pstmt->setString(1, simularStrs[j]);
+	     pstmt->setString(2, simularStrs[i]);
+             pstmt->executeUpdate();
+          }catch(sql::SQLException &e) {
+         }
+       }
+     
   }
 }
 

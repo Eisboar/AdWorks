@@ -29,7 +29,7 @@ QueryResult BackEnd::matchAdRewrites(const std::vector<std::string>& rewriteList
   if(rewriteList.empty()) throw std::runtime_error("Empty rewrite list");
   
   try {
-    if(user == NULL) {
+   /* if(user == NULL) {
       //no user, just query
       std::string stmt = "SELECT Titel, Slogan, a.AdID "
 	"FROM (Ads as a JOIN Queries as q ON a.AdID = q.AdID) "
@@ -46,9 +46,23 @@ QueryResult BackEnd::matchAdRewrites(const std::vector<std::string>& rewriteList
       stmt.append(order);
 
       pstmt.reset(con->prepareStatement(stmt));
-      for(unsigned int i = 0; i < rewriteList.size(); ++i) {
+      for(unsigned int i = 1; i < rewriteList.size(); ++i) {
+	cout<<"hi";	
 	pstmt->setString(i, rewriteList[i]);
-      }
+      }*/
+if(user == NULL) {
+      //no user, just query
+      pstmt.reset(con->prepareStatement("SELECT Titel, Slogan, a.AdID FROM (Ads as a JOIN Queries as q ON a.AdID = q.AdID) WHERE Bid_Phrase LIKE ? OR Bid_Phrase LIKE ? OR Bid_Phrase LIKE ? OR Bid_Phrase LIKE ? OR Bid_Phrase LIKE ? OR Bid_Phrase LIKE ? ORDER BY (Anzahl_Klicks / Anzahl_Impressions)*Gebot DESC"));
+      pstmt->setString(1, rewriteList.front());
+      int count=2;
+      std::list<std::string>::iterator it;
+      for(it=++(rewriteList.begin());it!=rewriteList.end();it++){
+      		pstmt->setString(count, *it);
+		count++;
+	}
+	for(count=count;count<7;count++){
+		pstmt->setString(count, *it);
+	}
 
     } else {
       //gender, dance the user dance

@@ -72,12 +72,25 @@ bool perform_lda(int argc, char* argv[]) {
   //iterate the dir and squash the files
   std::cout << dirName << std::endl;
 
+   std::ifstream in("config.txt");
+    
+    Config cfg(in);
+    in.close();
+
+  sql::Driver* driver = get_driver_instance();
+  boost::shared_ptr<sql::Connection> con;
+  con.reset(driver->connect(cfg["Server"]+":"+cfg["Port"], 
+			      cfg["User"], cfg["Password"]));
+
+    con->setSchema("AdWorks");
+
   // already have a file with that name? Not my problem.
   std::ofstream o("tmpfile-lda.txt");
-  lda(dirName, o);
+  lda(dirName, o, con);
   
   //here
-  std::system("lda est 0.01 40 settings.txt tmpfile-lda.txt random foo/");
+  //std::system("lda est 0.01 40 settings.txt tmpfile-lda.txt random foo/");
+  //std::ofstream ldaResult("foo/final.beta");
   
   return true;
 }
