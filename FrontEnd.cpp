@@ -419,7 +419,7 @@ public:
     ret.append(" ");
     ret.append(boost::lexical_cast<std::string>(count));
     ret.append(":");
-    if (i<=4)
+    if (i<=3)
       ret.append(boost::lexical_cast<std::string>(i));
     else
       ret.append("0");
@@ -499,21 +499,9 @@ void lda(const std::string& path, std::ofstream& out, boost::shared_ptr<sql::Con
     std::transform(dict.begin(), dict.end(), out_stream,
                    ToCount(&counting_set));
     out << endl;
-    out << vec.size();
-    std::transform(dict.begin(), dict.end(), out_stream,
-                   ToCount(&counting_set));
-    out << endl;
-     out << vec.size();
-    std::transform(dict.begin(), dict.end(), out_stream,
-                   ToCount(&counting_set));
-    out << endl;
-     out << vec.size();
-    std::transform(dict.begin(), dict.end(), out_stream,
-                   ToCount(&counting_set));
-    out << endl;
   }
 
-  std::system("lda est 0.1 40 settings.txt tmpfile-lda.txt random foo/");
+  std::system("lda est 0.025 40 settings.txt tmpfile-lda.txt random foo/");
   
   typedef tokenizer< boost::char_separator<char> > Tokenizer1;
   boost::char_separator<char> sep1(" ");
