@@ -416,10 +416,13 @@ public:
       count++;
       return ret; 
     }
+    ret.append(" ");
     ret.append(boost::lexical_cast<std::string>(count));
     ret.append(":");
-    ret.append(boost::lexical_cast<std::string>(i));
-    ret.append(" ");
+    if (i<=4)
+      ret.append(boost::lexical_cast<std::string>(i));
+    else
+      ret.append("0");
     ++count;
     return ret;
   }
@@ -475,7 +478,7 @@ void lda(const std::string& path, std::ofstream& out, boost::shared_ptr<sql::Con
   dict.erase(std::unique(dict.begin(), dict.end()), dict.end());
   cout << dict.size() << endl;
 
-  for(fs::directory_iterator it(p); it != fs::directory_iterator(); ++it) { 
+  for(fs::directory_iterator it(p); it != fs::directory_iterator(); ++it) {
     std::ifstream i(it->path().native().c_str());
     std::istreambuf_iterator<char> file_iter(i);
     std::istreambuf_iterator<char> eof;
@@ -490,15 +493,27 @@ void lda(const std::string& path, std::ofstream& out, boost::shared_ptr<sql::Con
     CountSet counting_set(vec.begin(), vec.end());
     vec.erase(std::unique(vec.begin(), vec.end()), vec.end());
 
-    out << vec.size() << " ";
+    out << vec.size();
 
     //decorate each with a count
     std::transform(dict.begin(), dict.end(), out_stream,
                    ToCount(&counting_set));
-    out << "\n";
+    out << endl;
+    out << vec.size();
+    std::transform(dict.begin(), dict.end(), out_stream,
+                   ToCount(&counting_set));
+    out << endl;
+     out << vec.size();
+    std::transform(dict.begin(), dict.end(), out_stream,
+                   ToCount(&counting_set));
+    out << endl;
+     out << vec.size();
+    std::transform(dict.begin(), dict.end(), out_stream,
+                   ToCount(&counting_set));
+    out << endl;
   }
 
-  //std::system("lda est 0.025 40 settings.txt tmpfile-lda.txt random foo/");
+  std::system("lda est 0.1 40 settings.txt tmpfile-lda.txt random foo/");
   
   typedef tokenizer< boost::char_separator<char> > Tokenizer1;
   boost::char_separator<char> sep1(" ");
